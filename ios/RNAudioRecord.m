@@ -23,6 +23,7 @@ RCT_EXPORT_METHOD(init:(NSDictionary *) options) {
     NSString *fileName = options[@"wavFile"] == nil ? @"audio.wav" : options[@"wavFile"];
     NSString *docDir = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
     _filePath = [NSString stringWithFormat:@"%@/%@", docDir, fileName];
+    [RNAudioRecord createDir:_filePath];
 }
 
 RCT_EXPORT_METHOD(start) {
@@ -101,6 +102,20 @@ void HandleAudioInputBuffer(void *inUserData,
 - (void)dealloc {
     RCTLogInfo(@"dealloc");
     AudioQueueDispose(_recordState.mQueue, true);
+}
+
+// 创建录音文件目录
++ (void)createDir: (NSString *) filePath {
+    NSString *audioFileDirPath = [filePath stringByDeletingLastPathComponent];
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+
+    BOOL isDir = NO;
+
+    BOOL existed = [fileManager fileExistsAtPath:audioFileDirPath isDirectory:&isDir];
+
+    if (!(isDir && existed)) {
+        [fileManager createDirectoryAtPath:audioFileDirPath withIntermediateDirectories:YES attributes:nil error:nil];
+    }
 }
 
 @end
