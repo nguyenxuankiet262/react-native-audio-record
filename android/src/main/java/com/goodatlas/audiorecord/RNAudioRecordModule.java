@@ -67,7 +67,7 @@ public class RNAudioRecordModule extends ReactContextBaseJavaModule {
             }
         }
 
-        audioSource = AudioSource.VOICE_RECOGNITION;
+        audioSource = AudioSource.MIC;
         if (options.hasKey("audioSource")) {
             audioSource = options.getInt("audioSource");
         }
