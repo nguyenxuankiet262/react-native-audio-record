@@ -21,10 +21,10 @@ RCT_EXPORT_METHOD(init:(NSDictionary *) options) {
     _recordState.mDataFormat.mFormatID          = kAudioFormatLinearPCM;
     _recordState.mDataFormat.mFormatFlags       = _recordState.mDataFormat.mBitsPerChannel == 8 ? kLinearPCMFormatFlagIsPacked : (kLinearPCMFormatFlagIsSignedInteger | kLinearPCMFormatFlagIsPacked);
 
-    
+
     _recordState.bufferByteSize = 2048;
     _recordState.mSelf = self;
-    
+
     NSString *fileName = options[@"wavFile"] == nil ? @"audio.wav" : options[@"wavFile"];
     NSString *docDir = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
     _filePath = [NSString stringWithFormat:@"%@/%@", docDir, fileName];
@@ -35,18 +35,18 @@ RCT_EXPORT_METHOD(start) {
     RCTLogInfo(@"start");
 
     [self savePreviousCategory];
-    
+
     // most audio players set session category to "Playback", record won't work in this mode
     // therefore set session category to "Record" before recording
     [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryRecord error:nil];
 
     _recordState.mIsRunning = true;
     _recordState.mCurrentPacket = 0;
-    
+
     CFURLRef url = CFURLCreateWithString(kCFAllocatorDefault, (CFStringRef)_filePath, NULL);
     AudioFileCreateWithURL(url, kAudioFileWAVEType, &_recordState.mDataFormat, kAudioFileFlags_EraseFile, &_recordState.mAudioFile);
     CFRelease(url);
-    
+
     AudioQueueNewInput(&_recordState.mDataFormat, HandleAudioInputBuffer, &_recordState, NULL, NULL, 0, &_recordState.mQueue);
     for (int i = 0; i < kNumberBuffers; i++) {
         AudioQueueAllocateBuffer(_recordState.mQueue, _recordState.bufferByteSize, &_recordState.mBuffers[i]);
@@ -71,6 +71,26 @@ RCT_EXPORT_METHOD(stop:(RCTPromiseResolveBlock)resolve
     RCTLogInfo(@"file size %llu", fileSize);
 }
 
+-(float)getCurrentPower {
+
+  UInt32 dataSize = sizeof(AudioQueueLevelMeterState) * _recordState.mDataFormat.mChannelsPerFrame;
+  AudioQueueLevelMeterState *levels = (AudioQueueLevelMeterState*)malloc(dataSize);
+
+  OSStatus rc = AudioQueueGetProperty(_recordState.mQueue, kAudioQueueProperty_CurrentLevelMeter, levels, &dataSize);
+  if (rc) {
+//    NSLog(@"NoiseLeveMeter>>takeSample - AudioQueueGetProperty(CurrentLevelMeter) returned %@", rc);
+  }
+
+  float channelAvg = 0;
+  for (int i = 0; i < _recordState.mDataFormat.mChannelsPerFrame; i++) {
+    channelAvg += levels[i].mPeakPower;
+  }
+  free(levels);
+
+  // This works because in this particular case one channel always has an mAveragePower of 0.
+  return channelAvg;
+}
+
 void HandleAudioInputBuffer(void *inUserData,
                        AudioQueueRef inAQ,
                        AudioQueueBufferRef inBuffer,
@@ -78,11 +98,11 @@ void HandleAudioInputBuffer(void *inUserData,
                        UInt32 inNumPackets,
                        const AudioStreamPacketDescription *inPacketDesc) {
     AQRecordState* pRecordState = (AQRecordState *)inUserData;
-    
+
     if (!pRecordState->mIsRunning) {
         return;
     }
-    
+
     if (AudioFileWritePackets(pRecordState->mAudioFile,
                               false,
                               inBuffer->mAudioDataByteSize,
@@ -93,13 +113,10 @@ void HandleAudioInputBuffer(void *inUserData,
                               ) == noErr) {
         pRecordState->mCurrentPacket += inNumPackets;
     }
-    
-    short *samples = (short *) inBuffer->mAudioData;
-    long nsamples = inBuffer->mAudioDataByteSize;
-    NSData *data = [NSData dataWithBytes:samples length:nsamples];
-    NSString *str = [data base64EncodedStringWithOptions:0];
-    [pRecordState->mSelf sendEventWithName:@"data" body:str];
-    
+
+    float volume = [pRecordState->mSelf getCurrentPower];
+    [pRecordState->mSelf sendEventWithName:@"data" body:[NSNumber numberWithFloat:volume]];
+
     AudioQueueEnqueueBuffer(pRecordState->mQueue, inBuffer, 0, NULL);
 }
 
@@ -135,6 +152,18 @@ void HandleAudioInputBuffer(void *inUserData,
         [[AVAudioSession sharedInstance] setCategory:self.previousCategory error:nil];
         self.previousCategory = nil;
     }
+}
+
+- (BOOL)enableUpdateLevelMetering
+{
+    UInt32 val = 1;
+    OSStatus status = AudioQueueSetProperty(_recordState.mQueue, kAudioQueueProperty_EnableLevelMetering, &val, sizeof(UInt32));
+    if( status == kAudioSessionNoError )
+    {
+        return YES;
+    }
+
+    return NO;
 }
 
 @end
