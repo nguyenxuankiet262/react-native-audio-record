@@ -118,6 +118,7 @@ void HandleAudioInputBuffer(void *inUserData,
     [pRecordState->mSelf sendEventWithName:@"data" body:[NSNumber numberWithFloat:volume]];
 
     AudioQueueEnqueueBuffer(pRecordState->mQueue, inBuffer, 0, NULL);
+    [self enableUpdateLevelMetering];
 }
 
 - (NSArray<NSString *> *)supportedEvents {
