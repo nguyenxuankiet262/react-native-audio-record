@@ -53,6 +53,7 @@ RCT_EXPORT_METHOD(start) {
         AudioQueueEnqueueBuffer(_recordState.mQueue, _recordState.mBuffers[i], 0, NULL);
     }
     AudioQueueStart(_recordState.mQueue, NULL);
+    [self enableUpdateLevelMetering];
 }
 
 RCT_EXPORT_METHOD(stop:(RCTPromiseResolveBlock)resolve
@@ -118,7 +119,6 @@ void HandleAudioInputBuffer(void *inUserData,
     [pRecordState->mSelf sendEventWithName:@"data" body:[NSNumber numberWithFloat:volume]];
 
     AudioQueueEnqueueBuffer(pRecordState->mQueue, inBuffer, 0, NULL);
-    [self enableUpdateLevelMetering];
 }
 
 - (NSArray<NSString *> *)supportedEvents {
